@@ -1,4 +1,6 @@
 const express = require('express');
+const multer = require('multer');
+const ImageKit = require('imagekit');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
@@ -11,10 +13,9 @@ const port = process.env.PORT || 5000;
 // CORS Configuration
 const corsOptions = {
   origin: [
-    'https://staging.d12hcd9va1ufc7.amplifyapp.com',
     'https://mnly.store',
     'https://www.mnly.store',
-    'http://localhost:3000',
+    'http://localhost:3000'
   ],
   credentials: true,
   optionSuccessStatus: 200,
@@ -43,29 +44,142 @@ const transporter = nodemailer.createTransport({
   requireTLS: true,
 });
 
-
 // Function to Send Email to Admin Only
 const sendOrderEmail = async orderData => {
   try {
+    const { _id, ...filteredOrder } = orderData;
+
+    const itemsList = filteredOrder.items
+      .map(
+        (item, i) => `
+          <tr style="text-align:right; background:#ffffff;">
+            <td>${i + 1}</td>
+            <td>${item.color}</td>
+            <td>${item.size}</td>
+            <td>${item.qty}</td>
+            <td>৳${item.price}</td>
+            <td><strong>৳${item.lineTotal}</strong></td>
+          </tr>
+        `
+      )
+      .join('');
+
+    const htmlBody = `
+      <div style="font-family: 'Segoe UI', Arial, sans-serif; color: #2d3748; background-color:#f8fafc; padding:20px;">
+        <div style="max-width:600px; margin:auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.08);">
+          
+          <div style="background:#2b6cb0; color:white; padding:15px 25px;">
+            <h2 style="margin:0;">🛒 New Order Received!</h2>
+            <p style="margin:5px 0 0;">Order ID: <strong>${
+              filteredOrder.orderId
+            }</strong></p>
+          </div>
+
+          <div style="padding:25px;">
+            <p><strong>Site Name:</strong> ${filteredOrder.siteName.toUpperCase()}</p>
+            <p><strong>Product Title:</strong> ${filteredOrder.title}</p>
+
+            <h3 style="margin-top:25px; color:#2b6cb0;">👤 Customer Details</h3>
+            <table style="width:100%; margin-top:8px; border-collapse:collapse;">
+              <tr><td><strong>Name:</strong></td><td>${
+                filteredOrder.customer.name
+              }</td></tr>
+              <tr><td><strong>Phone:</strong></td><td>${
+                filteredOrder.customer.phone
+              }</td></tr>
+              <tr><td><strong>Address:</strong></td><td>${
+                filteredOrder.customer.address
+              }</td></tr>
+              <tr><td><strong>Area:</strong></td><td>${
+                filteredOrder.customer.area
+              }</td></tr>
+              <tr><td><strong>Note:</strong></td><td>${
+                filteredOrder.customer.notes || 'N/A'
+              }</td></tr>
+            </table>
+
+            <h3 style="margin-top:30px; color:#2b6cb0;">🧾 Order Summary</h3>
+            <table border="0" cellpadding="8" cellspacing="0" style="width:100%; border-collapse:collapse; margin-top:10px; font-size:14px; border:1px solid #e2e8f0;">
+              <thead style="background:#edf2f7; color:#2d3748;">
+                <tr style="text-align:right;">
+                  <th>#</th>
+                  <th>Color</th>
+                  <th>Size</th>
+                  <th>Qty</th>
+                  <th>Price</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsList}
+                <tr style="background:#f7fafc; border-top:2px solid #cbd5e0;">
+                  <td colspan="4"></td>
+                  <td style="text-align:right;"><strong>Subtotal:</strong></td>
+                  <td style="text-align:right;"><strong>৳${
+                    filteredOrder.subtotal
+                  }</strong></td>
+                </tr>
+                <tr style="background:#f7fafc;">
+                  <td colspan="4"></td>
+                  <td style="text-align:right;"><strong>Shipping Fee:</strong></td>
+                  <td style="text-align:right;"><strong>৳${
+                    filteredOrder.shippingFee
+                  }</strong></td>
+                </tr>
+                <tr style="background:#edf2f7;">
+                  <td colspan="4"></td>
+                  <td style="text-align:right;"><strong>Total Quantity:</strong></td>
+                  <td style="text-align:right;"><strong>${
+                    filteredOrder.totalQty
+                  } ${filteredOrder.unit}</strong></td>
+                </tr>
+                <tr style="background:#e2e8f0;">
+                  <td colspan="4"></td>
+                  <td style="text-align:right; font-weight:bold; color:#2b6cb0;">Grand Total:</td>
+                  <td style="text-align:right; font-weight:bold; color:#2b6cb0;">৳${
+                    filteredOrder.total
+                  }</td>
+                </tr>
+                <tr style="background:#cbd5e0;">
+                  <td colspan="4"></td>
+                  <td style="text-align:right;"><strong>Status:</strong></td>
+                  <td style="text-align:right;"><strong>${
+                    filteredOrder.status
+                  }</strong></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <p style="margin-top:25px;">Please process this order accordingly.</p>
+          </div>
+        </div>
+      </div>
+    `;
+
     const info = await transporter.sendMail({
       from: process.env.EMAIL,
-      to: 'mnlypremium@gmail.com',
-      subject: `New Order Received - ${orderData.orderId}`,
-      text: `New order received from MNLY!\n
-      Customer Name: ${orderData.customer.name}
-      Phone: ${orderData.customer.phone}
-      Address: ${orderData.customer.address}\n
-      Please process the order accordingly.`,
+      to: process.env.EMAIL,
+      subject: `New Order Received - ${filteredOrder.orderId}`,
+      html: htmlBody,
     });
 
-    console.log('Admin email sent:', info.response);
+    console.log('✅ Admin email sent:', info.response);
     return true;
   } catch (error) {
-    console.error('Error sending admin email:', error);
+    console.error('❌ Error sending admin email:', error);
     return false;
   }
 };
 
+const imagekit = new ImageKit({
+  publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+  privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
+});
+
+// Multer Setup
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
 
 async function run() {
   try {
@@ -75,7 +189,6 @@ async function run() {
     const userCollection = client.db('mnly').collection('user');
     const productCollection = client.db('mnly').collection('product');
     const orderCollection = client.db('mnly').collection('order');
-    const aboutCollection = client.db('mnly').collection('about');
     const reviewCollection = client.db('mnly').collection('review');
 
     // JWT API
@@ -144,22 +257,6 @@ async function run() {
       res.send(user);
     });
 
-    app.get('/user/email/:email', async (req, res) => {
-      const email = req.params.email;
-      console.log('Fetching data for email:', email); // log
-      try {
-        const user = await userCollection.findOne({ email });
-        if (user) {
-          console.log('User data found:', user); // log
-          res.send(user);
-        } else {
-          res.status(404).send({ message: 'User not found' });
-        }
-      } catch (error) {
-        res.status(500).send({ message: 'Server error', error });
-      }
-    });
-
     // Create a new user
     app.post('/user', async (req, res) => {
       const newUser = req.body;
@@ -182,10 +279,20 @@ async function run() {
       res.send(product);
     });
 
+    // Get product by ID
     app.get('/product/:id', async (req, res) => {
       const id = req.params.id;
       const product = await productCollection.findOne({
         _id: new ObjectId(id),
+      });
+      res.send(product);
+    });
+
+    // Get product by siteName (simple version, no error handling)
+    app.get('/product/s/:siteName', async (req, res) => {
+      const siteName = req.params.siteName;
+      const product = await productCollection.findOne({
+        siteName: { $regex: `^${siteName}$`, $options: 'i' },
       });
       res.send(product);
     });
@@ -198,15 +305,125 @@ async function run() {
     //   res.send(result);
     // });
 
+    //   app.put('/product/:id', async (req, res) => {
+    //     const id = req.params.id;
+    //     // const filter = { _id: id };
+    //     const filter = { _id: new ObjectId(id) };
+    //     const updateDoc = { $set: req.body };
+    //     const result = await productCollection.updateOne(filter, updateDoc);
+    //     res.send(result);
+    //   });
 
-    app.put('/product/:id', async (req, res) => {
-      const id = req.params.id;
-      // const filter = { _id: id };
-      const filter = { _id: new ObjectId(id) };
-      const updateDoc = { $set: req.body };
-      const result = await productCollection.updateOne(filter, updateDoc);
-      res.send(result);
-    });
+    app.put(
+      '/product/:id',
+      upload.fields([
+        { name: 'logo', maxCount: 1 },
+        { name: 'chart', maxCount: 1 },
+        { name: 'shipPartner', maxCount: 1 },
+        { name: 'bannerFile', maxCount: 1 },
+        { name: 'video', maxCount: 1 },
+        { name: 'itemImage', maxCount: 1 },
+      ]),
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const filter = { _id: new ObjectId(id) };
+
+          const existingProduct = await productCollection.findOne(filter);
+          if (!existingProduct) throw new Error('Product not found');
+
+          // Create clean body object
+          const bodyData = { ...req.body };
+
+          Object.keys(bodyData).forEach(key => {
+            if (!key.trim()) delete bodyData[key];
+          });
+
+          let updatedItems = existingProduct.item || [];
+
+          if (bodyData.item) {
+            updatedItems = JSON.parse(bodyData.item);
+          }
+
+          if (req.files && req.files.itemImage) {
+            const index = Number(req.body.imageIndex);
+
+            // Delete imageIndex so DB never stores it
+            delete bodyData.imageIndex;
+
+            if (!isNaN(index) && updatedItems[index]) {
+              const file = req.files.itemImage[0];
+              const uploadResponse = await imagekit.upload({
+                file: file.buffer,
+                fileName: file.originalname,
+              });
+
+              updatedItems[index].image = uploadResponse.url;
+            }
+          }
+
+          bodyData.item = updatedItems;
+
+          let banner = existingProduct.banner || { image: '', status: false };
+
+          // If new banner image uploaded
+          if (req.files && req.files.bannerFile) {
+            const file = req.files.bannerFile[0];
+            const uploadResponse = await imagekit.upload({
+              file: file.buffer,
+              fileName: file.originalname,
+            });
+            banner.image = uploadResponse.url;
+          }
+
+          // Update banner status only (do not overwrite image if not given)
+          if (bodyData.banner) {
+            try {
+              const parsedBanner = JSON.parse(bodyData.banner);
+              if (parsedBanner.status !== undefined) {
+                banner.status = parsedBanner.status;
+              }
+            } catch (err) {
+              // ignore parse error
+            }
+          }
+
+          bodyData.banner = banner;
+
+          const otherFiles = ['logo', 'chart', 'shipPartner', 'video'];
+          for (let field of otherFiles) {
+            if (req.files && req.files[field]) {
+              const file = req.files[field][0];
+              const uploadResponse = await imagekit.upload({
+                file: file.buffer,
+                fileName: file.originalname,
+              });
+              bodyData[field] = uploadResponse.url;
+            }
+          }
+
+          if (bodyData.status !== undefined) {
+            bodyData.status = bodyData.status === 'true';
+          } else {
+            delete bodyData.status;
+          }
+
+          if (bodyData.features)
+            bodyData.features = bodyData.features.split(',');
+
+          if (bodyData.theme) bodyData.theme = bodyData.theme.split(',');
+
+          const result = await productCollection.updateOne(filter, {
+            $set: bodyData,
+          });
+
+          res.send({ success: true, result });
+        } catch (err) {
+          console.error(err);
+          res.status(500).send({ success: false, error: err.message });
+        }
+      }
+    );
 
     // Order APIs
     app.get('/order', async (req, res) => {
@@ -304,38 +521,6 @@ async function run() {
       res.send(result);
     });
 
-    // Site About APIs
-    app.get('/about', async (req, res) => {
-      const about = await aboutCollection.find().toArray();
-      res.send(about);
-    });
-
-    app.get('/about/:id', async (req, res) => {
-      const id = req.params.id;
-      const about = await aboutCollection.findOne({
-        _id: new ObjectId(id),
-      });
-      res.send(about);
-    });
-
-    app.put('/about/:id', async (req, res) => {
-      const id = req.params.id;
-      const filter = { _id: new ObjectId(id) };
-      const updateDoc = { $set: { ...req.body } };
-      delete updateDoc.$set._id;
-
-      const result = await aboutCollection.updateOne(filter, updateDoc);
-      res.send(result);
-    });
-
-    app.delete('/about/:id', async (req, res) => {
-      const id = req.params.id;
-      const result = await aboutCollection.deleteOne({
-        _id: new ObjectId(id),
-      });
-      res.send(result);
-    });
-
     // Reviews APIs
     app.get('/review', async (req, res) => {
       const review = await reviewCollection.find().toArray();
@@ -343,10 +528,35 @@ async function run() {
     });
 
     // Add review
-    app.post('/review', async (req, res) => {
-      const newReview = req.body;
-      const result = await reviewCollection.insertOne(newReview);
-      res.send(result);
+    app.post('/review', upload.single('file'), async (req, res) => {
+      try {
+        const { siteName } = req.body;
+        if (!req.file || !siteName)
+          return res.status(400).send({ error: 'File and siteName required' });
+
+        // Upload to ImageKit
+        const result = await imagekit.upload({
+          file: req.file.buffer,
+          fileName: `${Date.now()}-${req.file.originalname}`,
+          folder: '/reviews',
+        });
+
+        const newReview = {
+          image: result.url,
+          siteName,
+          date: new Date().toLocaleDateString('en-US'),
+          time: new Date().toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        };
+
+        const dbResult = await reviewCollection.insertOne(newReview);
+        res.send({ ...newReview, _id: dbResult.insertedId });
+      } catch (err) {
+        console.error(err);
+        res.status(500).send({ error: 'Image upload failed' });
+      }
     });
 
     // Delete review
