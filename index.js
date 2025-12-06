@@ -189,6 +189,7 @@ async function run() {
     const userCollection = client.db('mnly').collection('user');
     const productCollection = client.db('mnly').collection('product');
     const orderCollection = client.db('mnly').collection('order');
+    const extraOrderCollection = client.db('cloth').collection('extraOrder');
     const reviewCollection = client.db('mnly').collection('review');
 
     // JWT API
@@ -516,6 +517,81 @@ async function run() {
     app.delete('/order/:id', async (req, res) => {
       const id = req.params.id;
       const result = await orderCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      res.send(result);
+    });
+
+    // Extra-Order APIs
+    app.get('/extraOrder', async (req, res) => {
+      const extraOrder = await extraOrderCollection.find().toArray();
+      res.send(extraOrder);
+    });
+
+    app.get('/extraOrder/:id', async (req, res) => {
+      const id = req.params.id;
+      const extraOrder = await extraOrderCollection.findOne({ _id: new ObjectId(id) });
+      res.send(extraOrder);
+    });
+
+    app.post('/extraOrder', async (req, res) => {
+      const orderData = req.body;
+
+      if (!orderData || !orderData.orderId || !orderData.customer) {
+        return res.status(400).send({
+          success: false,
+          message: "Invalid order payload"
+        });
+      }
+
+      const result = await extraOrderCollection.insertOne(orderData);
+
+      res.send({
+        success: true,
+        message: "Extra order saved successfully",
+        insertedId: result.insertedId
+      });
+    });
+
+    app.put('/extraOrder/:id', async (req, res) => {
+      const orderId = req.params.id;
+      const { status, type, updateDate, updateTime } = req.body;
+
+      try {
+        const filter = { _id: new ObjectId(orderId) };
+        const updateDoc = {
+          $set: {
+            status: status,
+            type: type,
+            updateDate: updateDate,
+            updateTime: updateTime,
+          },
+        };
+
+        const result = await extraOrderCollection.updateOne(filter, updateDoc);
+
+        if (result.modifiedCount > 0) {
+          res.status(200).send({
+            message: 'Extra order updated successfully',
+            data: { status, type, updateDate, updateTime },
+          });
+        } else {
+          res
+            .status(404)
+            .send({ message: 'Extra order not found or no changes made' });
+        }
+      } catch (error) {
+        console.error('Error updating extra order:', error);
+        res.status(500).send({
+          error: 'Failed to update extra order status',
+          details: error.message,
+        });
+      }
+    });
+
+    app.delete('/extraOrder/:id', async (req, res) => {
+      const id = req.params.id;
+      const result = await extraOrderCollection.deleteOne({
         _id: new ObjectId(id),
       });
       res.send(result);
